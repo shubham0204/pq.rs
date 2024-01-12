@@ -28,23 +28,63 @@ impl ProductQuantizer {
 
     fn fit(
         self: &mut ProductQuantizer , 
-        vectors: Vec<Vec<f32>> , 
+        vectors: &Vec<Vec<f32>> , 
         iterations: usize
     ) {
         let ds: usize = self.d / self.m ; 
         self.codewords = Vec::new() ; 
         for m in 0..self.m {
             let mut vectors_sub: Vec<Vec<f32>> = Vec::new() ; 
-            for vec in &vectors {
+            for vec in vectors {
                 vectors_sub.push( vec[ (m * ds)..((m+1) * ds) ].to_vec() ) ; 
             }
-            self.codewords.push( self.kmeans( vectors_sub , self.ks , iterations ) ) ; 
+            self.codewords.push( self.kmeans( &vectors_sub , self.ks , iterations ) ) ; 
         }
+    }
+
+    fn encode(
+        self: &ProductQuantizer , 
+        vectors: &Vec<Vec<f32>>
+    ) -> Vec<Vec<usize>> {
+        let ds: usize = self.d / self.m ; 
+        let mut vector_codes: Vec<Vec<usize>> = Vec::new() ; 
+        for m in 0..self.m {
+            let mut vectors_sub: Vec<Vec<f32>> = Vec::new() ; 
+            for vec in vectors {
+                vectors_sub.push( vec[ (m * ds)..((m+1) * ds) ].to_vec() ) ; 
+            }
+            vector_codes.push( self.vq( &vectors_sub , &self.codewords[m] ) )
+        }
+
+        vector_codes
+    }
+
+    fn vq(
+        self: &ProductQuantizer , 
+        subvectors: &Vec<Vec<f32>> , 
+        codebook: &Vec<Vec<f32>>
+    ) -> Vec<usize> {
+
+        let mut codes: Vec<usize> = Vec::new() ; 
+        for subvector in subvectors.iter() {
+            let mut min_distance: f32 = f32::MAX ; 
+            let mut min_distance_code_index: usize = 0 ; 
+            for ( i , code ) in codebook.iter().enumerate() {
+                let distance = self.euclid_distance( subvector , code ) ; 
+                if distance < min_distance {
+                    min_distance = distance ; 
+                    min_distance_code_index = i ; 
+                }
+            }
+            codes.push( min_distance_code_index ) ;
+        }
+
+        codes
     }
 
     fn kmeans(
         self: &ProductQuantizer , 
-        data: Vec<Vec<f32>> , 
+        data: &Vec<Vec<f32>> , 
         k: usize , 
         iter: usize
     ) -> Vec<Vec<f32>> {
@@ -121,17 +161,20 @@ impl ProductQuantizer {
 
 fn main() {
     let mut quantizer = ProductQuantizer::new( 4 , 2 , 8 , DistanceMetric::Dot ) ; 
+    let vectors: Vec<Vec<f32>> =  vec![ 
+        vec![ 5.2 , 3.4 , 1.5 , 3.4 , -3.4 , 3.4 , 0.0, 3.4 ] , 
+        vec![ 1.2 , 3.4 , 1.2 , 3.4 , 3.4 , -3.4 , 10.4 , 3.4 ] ,
+        vec![ -1.2 , 3.4 , 1.2 , 3.4 , 3.4 , 3.4 , 3.4 , 3.4 ] , 
+        vec![ 1.2 , 3.4 , 0.0 , 3.4 , 23.4 , 3.4 , 2.4 , 3.4096 ] ,
+        vec![ 1.2 , 3.4 , 2.2 , 3.42 , 3.4 , 3.4 , 3.4 , 3.4 ] , 
+        vec![ -1.2 , 3.4 , 1.2 , 3.4 , 3.4 , 4.4 , 3.4 , 3.4 ] ,
+        vec![ 1.2 , 3.4 , 1.2 , 3.9 , 3.4 , -10.4 , 3.4 , 3.4 ] , 
+        vec![ 1.2 , 3.4 , 1.2 , 3.4 , 0.0 , 3.4 , 3.4 , 3.4 ] 
+    ] ; 
     let codewords = quantizer.fit(
-        vec![ 
-            vec![ 1.2 , 3.4 , 1.2 , 3.4 , 3.4 , 3.4 , 3.4 , 3.4 ] , 
-            vec![ 1.2 , 3.4 , 1.2 , 3.4 , 3.4 , 3.4 , 3.4 , 3.4 ] ,
-            vec![ 1.2 , 3.4 , 1.2 , 3.4 , 3.4 , 3.4 , 3.4 , 3.4 ] , 
-            vec![ 1.2 , 3.4 , 1.2 , 3.4 , 3.4 , 3.4 , 3.4 , 3.4 ] ,
-            vec![ 1.2 , 3.4 , 1.2 , 3.4 , 3.4 , 3.4 , 3.4 , 3.4 ] , 
-            vec![ 1.2 , 3.4 , 1.2 , 3.4 , 3.4 , 3.4 , 3.4 , 3.4 ] ,
-            vec![ 1.2 , 3.4 , 1.2 , 3.4 , 3.4 , 3.4 , 3.4 , 3.4 ] , 
-            vec![ 1.2 , 3.4 , 1.2 , 3.4 , 3.4 , 3.4 , 3.4 , 3.4 ] 
-        ] , 100
+        &vectors , 100
     ) ; 
+    let vector_codes = quantizer.encode( &vectors ) ;
     println!( "{:?}" , codewords ) ;
+    println!( "{:?}" , vector_codes ) ;
 }
