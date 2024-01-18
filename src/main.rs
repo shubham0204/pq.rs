@@ -65,15 +65,41 @@ impl ProductQuantizer {
     ) -> Vec<Vec<usize>> {
         let sub_vec_dims: usize = self.src_vec_dims / self.n_subvectors ; 
         let mut vector_codes: Vec<Vec<usize>> = Vec::new() ; 
+        for vec in vectors {
+            let mut subvectors: Vec<Vec<f32>> = Vec::new() ; 
+            for m in 0..self.n_subvectors {
+                subvectors.push( vec[  (m * sub_vec_dims)..((m+1) * sub_vec_dims) ].to_vec() )
+            }
+            vector_codes.push( self.vector_quantize( &subvectors ) ) ; 
+        }
+
+        /*
         for m in 0..self.n_subvectors {
             let mut vectors_sub: Vec<Vec<f32>> = Vec::new() ; 
             for vec in vectors {
                 vectors_sub.push( vec[ (m * sub_vec_dims)..((m+1) * sub_vec_dims) ].to_vec() ) ; 
             }
             vector_codes.push( self.vector_quantize( &vectors_sub , &self.codewords[m] ) )
-        }
+        }*/ 
 
         vector_codes
+    }
+
+    pub fn dtable(
+        self: &ProductQuantizer , 
+        query: &Vec<f32>
+    ) -> Vec<Vec<f32>> {
+        let sub_vec_dims: usize = self.src_vec_dims / self.n_subvectors ; 
+        let mut dtable: Vec<Vec<f32>> = Vec::new() ; 
+        for m in 0..self.n_subvectors {
+            let query_sub: Vec<f32> = query[ (m * sub_vec_dims)..((m+1) * sub_vec_dims) ].to_vec() ; 
+            let mut m_sub_distances: Vec<f32> = Vec::new() ; 
+            for k in 0..self.n_codes {
+                m_sub_distances.push( self.euclid_distance( &self.codewords[m][k] , &query_sub ) )
+            }
+            dtable.push( m_sub_distances ) ; 
+        }
+        dtable
     }
 
     /// Given vectors and a codebook,
@@ -81,19 +107,18 @@ impl ProductQuantizer {
     /// which each vector is the nearest
     fn vector_quantize(
         self: &ProductQuantizer , 
-        vectors: &Vec<Vec<f32>> , 
-        codebook: &Vec<Vec<f32>>
+        vector: &Vec<Vec<f32>> 
     ) -> Vec<usize> {
 
         let mut codes: Vec<usize> = Vec::new() ; 
-        for subvector in vectors.iter() {
+        for ( m , subvector ) in vector.iter().enumerate() {
             let mut min_distance: f32 = f32::MAX ; 
             let mut min_distance_code_index: usize = 0 ; 
-            for ( i , code ) in codebook.iter().enumerate() {
+            for ( k , code ) in self.codewords[m].iter().enumerate() {
                 let distance = self.euclid_distance( subvector , code ) ; 
                 if distance < min_distance {
                     min_distance = distance ; 
-                    min_distance_code_index = i ; 
+                    min_distance_code_index = k ; 
                 } 
             }
             codes.push( min_distance_code_index ) ;
@@ -206,11 +231,27 @@ impl ProductQuantizer {
         squared_diff_sum.sqrt()
     }
 
+    fn dot( 
+        self: &ProductQuantizer , 
+        vec1: &Vec<f32> , 
+        vec2: &Vec<f32>
+    ) -> f32 {
+        let mut dot_product = 0.0 ; 
+        for i in 0..vec1.len() {
+            dot_product += vec1[i] * vec2[i] ; 
+        }
+        dot_product
+    }
+
 }
 
 
 fn main() {
-    let mut quantizer = ProductQuantizer::new( 4 , 2 , 8 , DistanceMetric::Dot ) ; 
+    let n_subvectors = 4 ; 
+    let n_codes = 8 ; 
+    let src_vec_dims = 8 ; 
+
+    let mut quantizer = ProductQuantizer::new( n_subvectors , n_codes , src_vec_dims , DistanceMetric::Dot ) ; 
     let vectors: Vec<Vec<f32>> =  vec![ 
         vec![ 5.2 , 3.4 , 1.5 , 3.4 , -3.4 , 3.4 , 0.0, 3.4 ] , 
         vec![ 1.2 , 3.4 , 1.2 , 3.4 , 3.4 , -3.4 , 10.4 , 3.4 ] ,
@@ -223,8 +264,10 @@ fn main() {
     ] ; 
     let codewords = quantizer.fit(
         &vectors , 100
-    ) ; 
+    ) ;
     let vector_codes = quantizer.encode( &vectors ) ;
+    let dtable = quantizer.dtable( &vectors[4] ) ; 
     println!( "{:?}" , codewords ) ;
     println!( "{:?}" , vector_codes ) ;
+    println!( "{:?}" , dtable ) ; 
 }
