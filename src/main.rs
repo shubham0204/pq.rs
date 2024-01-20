@@ -1,5 +1,7 @@
 use std::vec;
-
+use num_traits::sign::Unsigned;
+use num_traits::cast::AsPrimitive;
+use num_traits::cast::FromPrimitive;
 use rand::seq::SliceRandom ; 
 
 pub enum DistanceMetric {
@@ -59,12 +61,12 @@ impl ProductQuantizer {
     /// * `vectors` - Vectors to be quantized
     /// # Returns
     /// The quantized vectors
-    pub fn encode(
+    pub fn encode<T>(
         self: &ProductQuantizer , 
         vectors: &Vec<Vec<f32>>
-    ) -> Vec<Vec<usize>> {
+    ) -> Vec<Vec<T>> where T: Unsigned + FromPrimitive  {
         let sub_vec_dims: usize = self.src_vec_dims / self.n_subvectors ; 
-        let mut vector_codes: Vec<Vec<usize>> = Vec::new() ; 
+        let mut vector_codes: Vec<Vec<T>> = Vec::new() ; 
         for vec in vectors {
             let mut subvectors: Vec<Vec<f32>> = Vec::new() ; 
             for m in 0..self.n_subvectors {
@@ -72,16 +74,6 @@ impl ProductQuantizer {
             }
             vector_codes.push( self.vector_quantize( &subvectors ) ) ; 
         }
-
-        /*
-        for m in 0..self.n_subvectors {
-            let mut vectors_sub: Vec<Vec<f32>> = Vec::new() ; 
-            for vec in vectors {
-                vectors_sub.push( vec[ (m * sub_vec_dims)..((m+1) * sub_vec_dims) ].to_vec() ) ; 
-            }
-            vector_codes.push( self.vector_quantize( &vectors_sub , &self.codewords[m] ) )
-        }*/ 
-
         vector_codes
     }
 
@@ -102,26 +94,36 @@ impl ProductQuantizer {
         dtable
     }
 
+    pub fn search( 
+        self: &ProductQuantizer , 
+        queries: &Vec<Vec<f32>> , 
+        k: usize
+    ) -> Vec<&Vec<f32>> {
+        //let encoded_queries = self.encode::<u32>( queries ) ; 
+        
+        Vec::new()
+    }
+
     /// Given vectors and a codebook,
     /// return the index of the centroid in the codebook to 
     /// which each vector is the nearest
-    fn vector_quantize(
+    fn vector_quantize<T>(
         self: &ProductQuantizer , 
         vector: &Vec<Vec<f32>> 
-    ) -> Vec<usize> {
+    ) -> Vec<T> where T: FromPrimitive + Unsigned {
 
-        let mut codes: Vec<usize> = Vec::new() ; 
+        let mut codes: Vec<T> = Vec::new() ; 
         for ( m , subvector ) in vector.iter().enumerate() {
             let mut min_distance: f32 = f32::MAX ; 
-            let mut min_distance_code_index: usize = 0 ; 
+            let mut min_distance_code_index: T = T::from_u8( 0 ).unwrap() ; 
             for ( k , code ) in self.codewords[m].iter().enumerate() {
                 let distance = self.euclid_distance( subvector , code ) ; 
                 if distance < min_distance {
                     min_distance = distance ; 
-                    min_distance_code_index = k ; 
+                    min_distance_code_index = T::from_usize( k ).unwrap(); 
                 } 
             }
-            codes.push( min_distance_code_index ) ;
+            codes.push(  min_distance_code_index ) ;
         }
 
         codes
@@ -265,7 +267,7 @@ fn main() {
     let codewords = quantizer.fit(
         &vectors , 100
     ) ;
-    let vector_codes = quantizer.encode( &vectors ) ;
+    let vector_codes = quantizer.encode::<u32>( &vectors ) ;
     let dtable = quantizer.dtable( &vectors[4] ) ; 
     println!( "{:?}" , codewords ) ;
     println!( "{:?}" , vector_codes ) ;
