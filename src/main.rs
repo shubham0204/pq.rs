@@ -1,8 +1,7 @@
 use std::vec;
 use num_traits::sign::Unsigned;
-use num_traits::cast::AsPrimitive;
 use num_traits::cast::FromPrimitive;
-use rand::seq::SliceRandom ; 
+use rand::seq::SliceRandom; 
 
 pub enum DistanceMetric {
     L2 , 
@@ -24,7 +23,7 @@ impl ProductQuantizer {
         n_codes: usize ,
         src_vec_dims: usize ,
         metric: DistanceMetric
-    ) -> Self {
+        ) -> Self {
         ProductQuantizer{ n_subvectors , n_codes , src_vec_dims , codewords: Vec::new() , metric }
     }
 
@@ -32,7 +31,7 @@ impl ProductQuantizer {
         self: &mut ProductQuantizer , 
         src_vectors: &Vec<Vec<f32>> , 
         iterations: usize
-    ) {
+        ) {
         // `sub_vec_dims` is the dimensionality of the subvector
         // A subvector is a part of the source vector, obtained by dividing the source 
         // vector equally into `n_subvectors` parts
@@ -64,7 +63,7 @@ impl ProductQuantizer {
     pub fn encode<T>(
         self: &ProductQuantizer , 
         vectors: &Vec<Vec<f32>>
-    ) -> Vec<Vec<T>> where T: Unsigned + FromPrimitive  {
+        ) -> Vec<Vec<T>> where T: Unsigned + FromPrimitive  {
         let sub_vec_dims: usize = self.src_vec_dims / self.n_subvectors ; 
         let mut vector_codes: Vec<Vec<T>> = Vec::new() ; 
         for vec in vectors {
@@ -80,7 +79,7 @@ impl ProductQuantizer {
     pub fn dtable(
         self: &ProductQuantizer , 
         query: &Vec<f32>
-    ) -> Vec<Vec<f32>> {
+        ) -> Vec<Vec<f32>> {
         let sub_vec_dims: usize = self.src_vec_dims / self.n_subvectors ; 
         let mut dtable: Vec<Vec<f32>> = Vec::new() ; 
         for m in 0..self.n_subvectors {
@@ -96,12 +95,29 @@ impl ProductQuantizer {
 
     pub fn search( 
         self: &ProductQuantizer , 
-        queries: &Vec<Vec<f32>> , 
+        queries: &Vec<Vec<f32>> ,
+        codes: &Vec<Vec<u32>> , 
         k: usize
-    ) -> Vec<&Vec<f32>> {
-        //let encoded_queries = self.encode::<u32>( queries ) ; 
-        
-        Vec::new()
+        ) -> Vec<usize> {
+        let sub_vec_dims: usize = self.src_vec_dims / self.n_subvectors ; 
+        let mut distances: Vec<usize> = Vec::new() ; 
+        for query in queries.iter() {
+            let mut min_distance = f32::MAX ;
+            let mut min_distance_index = 0 ; 
+            for n in 0..codes.len() {
+                let mut distance = 0.0 ; 
+                for m in 0..self.n_subvectors {
+                    let query_sub: Vec<f32> = query[ m * sub_vec_dims..((m+1) * sub_vec_dims) ].to_vec() ; 
+                    distance += self.euclid_distance( &query_sub, &self.codewords[m][ codes[n][m] as usize ] ) ;
+                }
+                if  min_distance > distance {
+                    min_distance = distance ;
+                    min_distance_index = n ;
+                }
+            }
+            distances.push( min_distance_index ) ; 
+        }
+        distances
     }
 
     /// Given vectors and a codebook,
@@ -110,7 +126,7 @@ impl ProductQuantizer {
     fn vector_quantize<T>(
         self: &ProductQuantizer , 
         vector: &Vec<Vec<f32>> 
-    ) -> Vec<T> where T: FromPrimitive + Unsigned {
+        ) -> Vec<T> where T: FromPrimitive + Unsigned {
 
         let mut codes: Vec<T> = Vec::new() ; 
         for ( m , subvector ) in vector.iter().enumerate() {
@@ -137,13 +153,13 @@ impl ProductQuantizer {
         vecs: &Vec<Vec<f32>> , 
         n_clusters: usize , 
         iter: usize
-    ) -> Vec<Vec<f32>> {
+        ) -> Vec<Vec<f32>> {
         let mut assigned_centroids: Vec<Vec<f32>> = vec![ Vec::new() ; vecs.len() ] ; 
 
         // Choose random samples from `vecs` as initial centroids
         let mut centroids: Vec<Vec<f32>> = vecs.choose_multiple( &mut rand::thread_rng() , n_clusters )  
-                                            .map( | vec | vec.to_vec() )
-                                            .collect() ; 
+            .map( | vec | vec.to_vec() )
+            .collect() ; 
 
         let vec_dims: usize = vecs[0].len() ; 
 
@@ -202,7 +218,7 @@ impl ProductQuantizer {
         self: &ProductQuantizer , 
         vec: &mut Vec<f32> , 
         scale: f32
-    ) {
+        ) {
         for i in 0..vec.len() {
             vec[ i ] = vec[ i ] * scale ; 
         }
@@ -214,7 +230,7 @@ impl ProductQuantizer {
         self: &ProductQuantizer , 
         vec1: &mut Vec<f32> , 
         vec2: &Vec<f32>
-    ) {
+        ) {
         for i in 0..vec1.len() {
             vec1[ i ] = vec1[ i ] + vec2[ i ] ; 
         }
@@ -225,7 +241,7 @@ impl ProductQuantizer {
         self: &ProductQuantizer ,
         vec1: &Vec<f32> , 
         vec2: &Vec<f32>
-    ) -> f32 {
+        ) -> f32 {
         let mut squared_diff_sum = 0.0 ; 
         for i in 0..vec1.len() {
             squared_diff_sum += ( vec1[i] - vec2[i] ).powi( 2 ) ; 
@@ -237,7 +253,7 @@ impl ProductQuantizer {
         self: &ProductQuantizer , 
         vec1: &Vec<f32> , 
         vec2: &Vec<f32>
-    ) -> f32 {
+        ) -> f32 {
         let mut dot_product = 0.0 ; 
         for i in 0..vec1.len() {
             dot_product += vec1[i] * vec2[i] ; 
@@ -264,12 +280,13 @@ fn main() {
         vec![ 1.2 , 3.4 , 1.2 , 3.9 , 3.4 , -10.4 , 3.4 , 3.4 ] , 
         vec![ 1.2 , 3.4 , 1.2 , 3.4 , 0.0 , 3.4 , 3.4 , 3.4 ] 
     ] ; 
-    let codewords = quantizer.fit(
+    quantizer.fit(
         &vectors , 100
-    ) ;
+        ) ;
     let vector_codes = quantizer.encode::<u32>( &vectors ) ;
-    let dtable = quantizer.dtable( &vectors[4] ) ; 
-    println!( "{:?}" , codewords ) ;
+    let dtable = quantizer.dtable( &vectors[4] ) ;
+    let distances = quantizer.search( &vectors , &vector_codes , 2) ;
+    println!( "{:?}" , distances ) ; 
     println!( "{:?}" , vector_codes ) ;
     println!( "{:?}" , dtable ) ; 
 }
